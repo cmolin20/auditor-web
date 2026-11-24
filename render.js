@@ -60,7 +60,7 @@ return `<details class="grp" ${filt?'open':''}><summary><span class="dot ${sevOf
 ${its.length?`<ul class="issl">${its.map(i=>row(i,true)).join('')}</ul>`:'<p class="ok">✓ No s\'ha trobat res.</p>'}</div></details>`;}).join('');
 }else{
 const pg=new Map(),orphan=[],global=[];
-list.forEach(i=>{if(!i.pages.length){(i.file?orphan:global).push(i);return;}i.pages.forEach(p=>{if(!pg.has(p.l))pg.set(p.l,{p,its:[]});pg.get(p.l).its.push(i);});});
+list.forEach(i=>{if(!i.pages.length){(i.file?orphan:global).push(i);return;}i.pages.forEach(p=>{const kk=p.l||p.t;if(!pg.has(kk))pg.set(kk,{p,its:[]});pg.get(kk).its.push(i);});});
 const groups=[...pg.values()].sort((a,b)=>b.its.filter(i=>!done[i.id]).length-a.its.filter(i=>!done[i.id]).length);
 h+=global.length?`<ul class="issl" style="margin-bottom:12px">${global.map(i=>row(i,false)).join('')}</ul>`:'';
 h+=groups.map(g=>{const p=g.its.filter(i=>!done[i.id]).length;const cats=[...new Set(g.its.map(i=>CATS[i.cat].t))];

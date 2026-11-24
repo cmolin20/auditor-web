@@ -290,7 +290,7 @@ return `<details class="grp" ${filt?'open':''}><summary><span class="dot ${sevOf
 ${its.length?`<ul class="issl">${its.map(i=>row(i,true)).join('')}</ul>`:'<p class="ok">✓ No s\'ha trobat res.</p>'}</div></details>`;}).join('');
 }else{
 const pg=new Map(),orphan=[],global=[];
-list.forEach(i=>{if(!i.pages.length){(i.file?orphan:global).push(i);return;}i.pages.forEach(p=>{if(!pg.has(p.l))pg.set(p.l,{p,its:[]});pg.get(p.l).its.push(i);});});
+list.forEach(i=>{if(!i.pages.length){(i.file?orphan:global).push(i);return;}i.pages.forEach(p=>{const kk=p.l||p.t;if(!pg.has(kk))pg.set(kk,{p,its:[]});pg.get(kk).its.push(i);});});
 const groups=[...pg.values()].sort((a,b)=>b.its.filter(i=>!done[i.id]).length-a.its.filter(i=>!done[i.id]).length);
 h+=global.length?`<ul class="issl" style="margin-bottom:12px">${global.map(i=>row(i,false)).join('')}</ul>`:'';
 h+=groups.map(g=>{const p=g.its.filter(i=>!done[i.id]).length;const cats=[...new Set(g.its.map(i=>CATS[i.cat].t))];
@@ -303,7 +303,7 @@ $('rbody').innerHTML=h;
 const total=iss.length,urg=iss.filter(i=>i.sev==='r').length;
 let h=`<div class="band" id="resum"><h1>${urg?`${urg} ${urg==1?'cosa urgent':'coses urgents'} i ${total-urg} per revisar`:total?`${total} ${total==1?'cosa':'coses'} per revisar`:'No s\'ha trobat res per revisar'}</h1>
 <div class="meta"><span>${esc(R.name)}</span><span>${esc(R.site)}</span><span>Revisat el ${esc(R.date)}</span><span>${R.counts?.pages||0} pàgines · ${R.counts?.posts||0} notícies · ${R.counts?.media||0} fitxers</span></div>
-${R.partial?'<p class="note">Revisió reduïda: no s\'han pogut obrir els fitxers.</p>':''}
+${R.partial?'<p class="note">Revisió reduïda: no s\'han pogut obrir els fitxers.</p>':''}${R.demo?'<p class="why" style="border-left-color:var(--y)"><b>Exemple amb un centre i dades inventades.</b> Els botons per veure i editar les pàgines no hi surten perquè les pàgines no existeixen.</p>':''}
 <div class="chips" role="group" aria-label="Filtra per tema"><button type="button" class="chip on" data-c="">Tots <b>${total}</b></button>${Object.keys(CATS).map(c=>`<button type="button" class="chip" data-c="${c}"><span class="dot ${sevOf(c)}"></span>${esc(CATS[c].t)} <b>${cnt(c)}</b></button>`).join('')}</div>
 <div class="seg" role="group" aria-label="Com vols veure els resultats"><button type="button" class="sv on" data-v="pagina">Per pàgina</button><button type="button" class="sv" data-v="tema">Per tema</button></div>
 <div id="rbody"></div>
@@ -315,7 +315,18 @@ const v=e.target.closest('.sv');if(v){view=v.dataset.v;document.querySelectorAll
 $('report').onchange=e=>{const cb=e.target.closest('.iss input[type=checkbox]');if(!cb)return;const id=cb.closest('.iss').dataset.id;if(cb.checked)done[id]=1;else delete done[id];save();document.querySelectorAll('.iss').forEach(li=>{if(li.dataset.id===id){li.classList.toggle('done',cb.checked);const x=li.querySelector('input');if(x)x.checked=cb.checked;}});};
 $('report').scrollIntoView({behavior:'smooth'});
 }
-$('demo').addEventListener('click',()=>{$('url').value='agora.xtec.cat/insnouvic';$('f').requestSubmit();});
+const DEMO=(()=>{const p=(t,k='Pàgina')=>({t,k,l:'',e:''});const f=(n,t,d,w)=>({f:n,t,u:'',e:'',d,w});
+const P={ini:p('Inici'),pre:p('Preinscripció i matrícula d\'ESO'),con:p('Contacte'),pec:p('Projecte educatiu'),cal:p('Calendari del curs'),sor:p('Sortida al Montseny','Notícia'),fes:p('Festa de final de curs','Notícia'),cs:p('Consell escolar'),llib:p('Llibres de text'),tic:p('Taller de robòtica','Notícia')};
+return {v:'3.0',demo:true,site:'Web d\'exemple',name:'Institut Exemple (dades inventades)',date:new Date().toISOString().slice(0,10),counts:{pages:24,posts:41,media:186},partial:false,
+acc:{imgs:142,noAlt:118,libNoAlt:[],pagesNoAlt:[{...P.ini,n:6,files:['portada-1.jpg','portada-2.jpg','pati.jpg']},{...P.sor,n:14,files:['IMG_2031.jpg','IMG_2032.jpg','IMG_2040.jpg']},{...P.fes,n:9,files:['festa-01.jpg','festa-02.jpg']},{...P.tic,n:4,files:['robot.jpg']}],skips:[{...P.pec,h:'Missió',s:'Títol 1 → Títol 4'},{...P.cal,h:'Primer trimestre',s:'Títol 2 → Títol 5'}],generic:[{...P.pre,txt:'aquí',href:'https://exemple.invalid/calendari.pdf'},{...P.llib,txt:'clica',href:'https://exemple.invalid/llibres.pdf'}]},
+dades:{dni:[],tel:[{...P.con,v:'612 34x xxx',c:'per a dubtes de matrícula truqueu a la Marta al 612 34x xxx'}],emails:[{...P.con,v:'marta.exemple@gmail.com',c:'o escriviu a marta.exemple@gmail.com'}],iban:[],naix:[],tables:[{...P.cs,n:14,h:'Sector · Nom i cognoms · Càrrec'}],driveList:[{...P.pre,txt:'llista provisional',href:''},{...P.pre,txt:'llista d\'admesos',href:''},{...P.pre,txt:'llista d\'espera',href:''}],photoList:[{...P.sor,n:14},{...P.fes,n:9},{...P.tic,n:4}],users:[],
+sens:[f('llista-admesos-ESO.pdf','Llista d\'admesos ESO','2026-05-20',[P.pre]),f('barem-provisional.pdf','Barem provisional','2026-04-15',[])]},
+meta:{pdfs:38,imgs:142,authors:{'Laia Exemple':5,'jordi.prova':2},withAuthor:[f('full-informatiu-ESO.pdf','Full informatiu ESO','2026-02-10',[P.pre]),f('calendari-26-27.pdf','Calendari 26-27','2026-07-01',[P.cal]),f('normes-centre.pdf','Normes del centre','2025-09-12',[P.pec])].map((x,i)=>({...x,a:i==2?'jordi.prova':'Laia Exemple'})),gps:[{...f('IMG_2031.jpg','IMG_2031','2026-03-14',[P.sor]),gps:'41.7xxx,2.4xxx'}],artist:[],cams:[]},
+ia:{c2pa:[{...f('cartell-jornada.png','Cartell jornada portes obertes','2026-01-20',[P.ini]),g:'GPT-4o'}],leftovers:[{...P.tic,v:'Aquí tens una',c:'Aquí tens una proposta de text per a la notícia del taller'}],links:[],decl:[],extFiles:[{...f('normes-centre.pdf','Normes del centre','2025-09-12',[P.pec]),n:'iLovePDF'}]},
+img:{heic:[f('IMG_5501.heic','IMG_5501','2026-06-20',[P.fes]),f('IMG_5502.heic','IMG_5502','2026-06-20',[P.fes])],heavy:[{...f('portada-1.jpg','Portada','2025-09-01',[P.ini]),mb:4.2},{...f('IMG_2031.jpg','IMG_2031','2026-03-14',[P.sor]),mb:3.1}],heavyN:2},
+cad:{old:[f('calendari-25-26.pdf','Calendari 25-26','2025-07-01',[P.cal]),f('llibres-25-26.pdf','Llibres 25-26','2025-07-03',[])],dups:[{t:'llibres 1r eso',files:[f('llibres-1ESO.pdf','Llibres 1r ESO','2026-07-01',[P.llib]),f('llibres-1ESO-1.pdf','Llibres 1r ESO (1)','2026-07-01',[]),f('llibres-1ESO-2.pdf','Llibres 1r ESO (2)','2026-07-02',[])]}],stale:[],dupPages:[],unused:12},
+links:{checked:96,bad:[{...P.ini,u:'https://exemple.invalid/pagina-antiga/',s:404,txt:'Horaris'}]}};})();
+$('demo').addEventListener('click',()=>{$('err').textContent='';render(DEMO);});
 }
 </script>
 </body>
