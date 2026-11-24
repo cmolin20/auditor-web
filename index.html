@@ -58,6 +58,7 @@ nav.scroll a{flex:none;font-size:14px;color:var(--ink);text-decoration:none;padd
 @media(min-width:900px){nav.scroll{position:sticky;top:0;z-index:2}}
 .why{background:var(--card);border-left:4px solid var(--ink);border-radius:0;padding:12px 16px;margin:10px 0 14px;max-width:80ch}
 .how{border:2px solid var(--grn);border-radius:8px;padding:14px 18px;margin:18px 0 6px;max-width:90ch}.how b:first-child{color:var(--grn);font-size:17px}.how ol{margin:8px 0 0;padding-left:22px}.how li{margin:0 0 8px}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}.sep{border:0;border-top:1px dashed var(--line);margin:8px 0}.fn{word-break:break-all}details.more{margin:6px 0 14px}details.more>summary{cursor:pointer;font-weight:500;padding:8px 0;color:var(--ink)}h4{font-size:16px}
 html{scroll-padding-top:72px}
 @media(max-width:820px){.steps,.hero{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px;border-bottom:1px solid var(--line)}.stack td{display:flow-root;border:0;padding:3px 0;padding-inline-start:8em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal;color:var(--mut)}.stack td:empty{display:none}}
@@ -88,84 +89,97 @@ html{scroll-padding-top:72px}
 
 <script>
 async function AUDIT(o){
-const V='2.0';const base=o.base;const api=base+'wp-json/';
+const V='3.0';const base=o.base;const api=base+'wp-json/';
 let siteName=new URL(base).pathname.replace(/\//g,' ').trim()||new URL(base).hostname;
 try{const j=await fetch(api).then(r=>r.json());if(j&&j.name)siteName=j.name;}catch(e){}
 const W=api+'wp/v2/';
 async function all(type,fields){let out=[],p=1,tot=1;do{const r=await fetch(W+type+'?per_page=100&page='+p+'&_fields='+fields);if(!r.ok)return out;tot=+r.headers.get('X-WP-TotalPages')||1;out=out.concat(await r.json());p++;}while(p<=tot&&p<=20);return out;}
-o.progress('Llegint pàgines, entrades i fitxers…');
-const [pages,posts,media]=await Promise.all([all('pages','id,link,modified,title,content'),all('posts','id,link,modified,date,title,content'),all('media','id,source_url,alt_text,mime_type,modified,date,title,media_details')]);
+o.progress('Llegint pàgines, notícies i fitxers…');
+const [pages,posts,media]=await Promise.all([all('pages','id,link,modified,title,content,featured_media'),all('posts','id,link,modified,date,title,content,featured_media'),all('media','id,source_url,alt_text,mime_type,modified,date,title,media_details')]);
 const T=x=>{const d=document.createElement('textarea');d.innerHTML=x||'';return d.value;};
-const docs=[...pages.map(p=>({...p,k:'pàgina'})),...posts.map(p=>({...p,k:'entrada'}))];
 const edit=id=>base+'wp-admin/post.php?post='+id+'&action=edit';
+const docs=[...pages.map(p=>({...p,k:'Pàgina'})),...posts.map(p=>({...p,k:'Notícia'}))].map(d=>({...d,tt:T(d.title?.rendered)||'(sense títol)',ref:{t:T(d.title?.rendered)||'(sense títol)',k:d.k,l:d.link,e:edit(d.id)}}));
 const R={v:V,site:base,name:T(siteName),partial:!o.file,date:new Date().toISOString().slice(0,10),counts:{pages:pages.length,posts:posts.length,media:media.length}};
+const fn=u=>{try{return decodeURIComponent(new URL(u,base).pathname.split('/').pop());}catch(e){return String(u).split('/').pop();}};
+const key=u=>fn(u).toLowerCase().replace(/-(\d+)x(\d+)(?=\.\w+$)/,'').replace(/-scaled(?=\.\w+$)/,'');
+const parsed=docs.map(d=>({d,doc:new DOMParser().parseFromString(d.content?.rendered||'','text/html')}));
+const use=new Map();const addUse=(k,ref)=>{if(!use.has(k))use.set(k,[]);const a=use.get(k);if(!a.some(x=>x.l===ref.l))a.push(ref);};
+for(const {d,doc} of parsed){doc.querySelectorAll('img[src],a[href],source[src],video[src],audio[src]').forEach(el=>{const u=el.getAttribute('src')||el.getAttribute('href')||'';if(u.includes('/wp-content/uploads/'))addUse(key(u),d.ref);(el.getAttribute('srcset')||'').split(',').forEach(s=>{const v=s.trim().split(' ')[0];if(v.includes('/wp-content/uploads/'))addUse(key(v),d.ref);});});
+ if(d.featured_media){const m=media.find(x=>x.id===d.featured_media);if(m)addUse(key(m.source_url),{...d.ref,feat:1});}}
+const where=m=>(use.get(key(m.source_url))||[]).slice(0,6);
+const mref=m=>({f:fn(m.source_url),t:T(m.title?.rendered),u:m.source_url,e:edit(m.id),d:(m.date||'').slice(0,10),w:where(m)});
 const now=new Date(),y=now.getFullYear()%100,cs=now.getMonth()>=8?y:y-1;
 const oldCourse=s=>{let m,re=/(?:^|\D)(\d{2})\s?[-_\/]\s?(\d{2})(?:\D|$)/g;while(m=re.exec(s)){const a=+m[1],b=+m[2];if(b===a+1&&a<cs&&a>=10)return true;}const ys=(s.match(/20[12]\d/g)||[]).map(Number);return ys.length>0&&Math.max(...ys)<2000+cs;};
-o.progress('Revisant accessibilitat i contingut…');
+o.progress('Revisant el contingut…');
 const imgs=media.filter(m=>m.mime_type.startsWith('image/'));
-const noAlt=imgs.filter(m=>!(m.alt_text||'').trim());
-R.acc={imgs:imgs.length,noAlt:noAlt.length,skips:[],generic:[]};
-R.dades={emails:[],tel:[],dni:[],iban:[],naix:[],tables:[]};
-R.ia={leftovers:[],links:[],decl:[],c2pa:[],names:[],pdfAI:[],ext:{}};
+const files=media.filter(m=>!m.mime_type.startsWith('image/'));
+R.acc={imgs:imgs.length,noAlt:0,libNoAlt:[],pagesNoAlt:[],skips:[],generic:[]};
+R.dades={emails:[],tel:[],dni:[],iban:[],naix:[],tables:[],driveList:[],photoList:[]};
+R.ia={leftovers:[],links:[],decl:[],c2pa:[],names:[],pdfAI:[],ext:{},extFiles:[]};
 const host=new URL(base).hostname;
 const okMail=new RegExp('@('+['xtec.cat','gencat.cat',host.replace(/^www\./,'')].map(h=>h.replace(/\./g,'\\.')).join('|')+')$','i');
 const dniOk=s=>{const m=s.toUpperCase().match(/^([XYZ]?)(\d{7,8})([A-Z])$/);if(!m)return false;const n=+(({X:'0',Y:'1',Z:'2'}[m[1]]||'')+m[2]);return 'TRWAGMYFPDXBNJZSQVHLCKE'[n%23]===m[3];};
 const leftRe=/(com a model de llenguatge|como modelo de lenguaje|as an ai language|aquí tens (un|una|el|la|els|les) |espero que (això|aixo) (t'|et )?ajudi|espero que esto te ayude|certainly!|\[inser(eix|ta|ir|t)[^\]]{0,40}\]|\[nom (de|del)[^\]]{0,40}\]|my knowledge cutoff)/i;
 const aiLinkRe=/(chatgpt\.com|chat\.openai|gemini\.google|copilot\.microsoft|claude\.ai|perplexity\.ai|character\.ai|poe\.com|chat\.deepseek|chat\.mistral|gamma\.app|magicschool|notebooklm)/i;
 const declRe=/(intel·lig[eè]ncia artificial|intel\.lig[eè]ncia artificial|inteligencia artificial)/i;
-let drive=[],photoPosts=0,internal=new Map();
-for(const d of docs){const h=d.content?.rendered||'';const doc=new DOMParser().parseFromString(h,'text/html');const t=doc.body.textContent||'';const tt=T(d.title?.rendered);
- let prev=1;doc.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(x=>{const l=+x.tagName[1];if(l>prev+1&&!R.acc.skips.some(s=>s.t===tt))R.acc.skips.push({t:tt,s:'H'+prev+' → H'+l,e:edit(d.id)});prev=l;});
- doc.querySelectorAll('a').forEach(a=>{const tx=a.textContent.trim().toLowerCase();if(/^(aqu[ií]|clica|clic|fes clic|fes clic aquí|clica aquí|enllaç|link|here|més|més informació)$/.test(tx)&&!R.acc.generic.some(g=>g.t===tt))R.acc.generic.push({t:tt,e:edit(d.id)});
-  const href=a.getAttribute('href')||'';
-  if(/docs\.google|drive\.google|forms\.gle|forms\.office|onedrive|sharepoint|dropbox/.test(href))drive.push({t:tt,u:href});
-  if(aiLinkRe.test(href))R.ia.links.push({t:tt,u:href});
-  try{const u=new URL(href,base);if(u.href.startsWith(base)&&!/wp-admin|#/.test(href)&&!internal.has(u.href.split('#')[0]))internal.set(u.href.split('#')[0],tt);}catch(e){}});
- doc.querySelectorAll('iframe,script').forEach(f=>{if(aiLinkRe.test(f.src||''))R.ia.links.push({t:tt,u:f.src});});
- if(doc.querySelector('img')&&d.k==='entrada')photoPosts++;
- (t.match(/[\w.+-]+@[a-z0-9-]+(?:\.[a-z]{2,})+/g)||[]).forEach(e=>{if(!okMail.test(e))R.dades.emails.push({t:tt,v:e});});
- (t.match(/(?:\+34[ .]?)?\b[67]\d{2}[ .]?\d{3}[ .]?\d{3}\b/g)||[]).forEach(v=>R.dades.tel.push({t:tt,v}));
- (t.match(/\b[XYZ]?\d{7,8}[ -]?[A-Z]\b/gi)||[]).forEach(v=>{if(dniOk(v.replace(/[ -]/g,'')))R.dades.dni.push({t:tt,v:v.slice(0,3)+'*****'+v.slice(-1)});});
- (t.match(/\bES\d{2}[ ]?\d{4}[ ]?\d{4}/g)||[]).forEach(v=>R.dades.iban.push({t:tt,v:v.slice(0,8)+'…'}));
- if(/(data de naixement|fecha de nacimiento|nascut el|nascuda el)/i.test(t))R.dades.naix.push({t:tt});
- doc.querySelectorAll('table').forEach(tb=>{if(tb.rows.length>5)R.dades.tables.push({t:tt,n:tb.rows.length});});
- const lm=t.match(leftRe);if(lm)R.ia.leftovers.push({t:tt,v:lm[0].slice(0,60),e:edit(d.id)});
- if(declRe.test(tt+' '+t))R.ia.decl.push({t:tt,l:d.link});}
-R.dades.drive=drive.length;R.dades.driveEx=drive.slice(0,8);R.dades.photoPosts=photoPosts;
+const genRe=/^(aqu[ií]|clica|clic|fes clic|fes clic aquí|clica aquí|enllaç|link|here|més|més informació|veure|descarrega|descarregar)$/;
+const ctx=(t,i,len)=>t.slice(Math.max(0,i-40),i+len+40).replace(/\s+/g,' ').trim();
+let internal=new Map();
+for(const {d,doc} of parsed){const t=doc.body.textContent||'';const ref=d.ref;
+ let prev=1;doc.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(x=>{const l=+x.tagName[1];if(l>prev+1)R.acc.skips.push({...ref,s:'Títol '+prev+' → Títol '+l,h:x.textContent.trim().slice(0,80)});prev=l;});
+ const na=[...doc.querySelectorAll('img')].filter(i=>!(i.getAttribute('alt')||'').trim()).map(i=>fn(i.getAttribute('src')||''));
+ if(na.length)R.acc.pagesNoAlt.push({...ref,n:na.length,files:na.slice(0,12)});
+ doc.querySelectorAll('a').forEach(a=>{const tx=a.textContent.trim();const href=a.getAttribute('href')||'';
+  if(genRe.test(tx.toLowerCase()))R.acc.generic.push({...ref,txt:tx,href});
+  if(/docs\.google|drive\.google|forms\.gle|forms\.office|onedrive|sharepoint|dropbox/.test(href))R.dades.driveList.push({...ref,txt:tx.slice(0,80)||'(sense text)',href});
+  if(aiLinkRe.test(href))R.ia.links.push({...ref,txt:tx.slice(0,80),href});
+  try{const u=new URL(href,base);const k=u.href.split('#')[0];if(u.href.startsWith(base)&&!/wp-admin|#/.test(href)&&!internal.has(k))internal.set(k,{...ref,txt:tx.slice(0,80)});}catch(e){}});
+ doc.querySelectorAll('iframe,script').forEach(f=>{if(aiLinkRe.test(f.src||''))R.ia.links.push({...ref,txt:'(incrustat)',href:f.src});});
+ const ni=doc.querySelectorAll('img').length;if(ni&&d.k==='Notícia')R.dades.photoList.push({...ref,n:ni});
+ let m,re;
+ re=/[\w.+-]+@[a-z0-9-]+(?:\.[a-z]{2,})+/g;while(m=re.exec(t)){if(!okMail.test(m[0]))R.dades.emails.push({...ref,v:m[0],c:ctx(t,m.index,m[0].length)});}
+ re=/(?:\+34[ .]?)?\b[67]\d{2}[ .]?\d{3}[ .]?\d{3}\b/g;while(m=re.exec(t))R.dades.tel.push({...ref,v:m[0],c:ctx(t,m.index,m[0].length)});
+ re=/\b[XYZ]?\d{7,8}[ -]?[A-Z]\b/gi;while(m=re.exec(t)){if(dniOk(m[0].replace(/[ -]/g,'')))R.dades.dni.push({...ref,v:m[0].slice(0,3)+'*****'+m[0].slice(-1),c:ctx(t,m.index,0)});}
+ re=/\bES\d{2}[ ]?\d{4}[ ]?\d{4}/g;while(m=re.exec(t))R.dades.iban.push({...ref,v:m[0].slice(0,8)+'…'});
+ m=t.match(/(data de naixement|fecha de nacimiento|nascut el|nascuda el)/i);if(m)R.dades.naix.push({...ref,c:ctx(t,m.index,m[0].length)});
+ doc.querySelectorAll('table').forEach(tb=>{if(tb.rows.length>5)R.dades.tables.push({...ref,n:tb.rows.length,h:(tb.rows[0]?.textContent||'').replace(/\s+/g,' ').trim().slice(0,90)});});
+ m=t.match(leftRe);if(m)R.ia.leftovers.push({...ref,v:m[0].slice(0,60),c:ctx(t,m.index,m[0].length)});
+ if(declRe.test(d.tt+' '+t))R.ia.decl.push(ref);}
+const noAltLib=imgs.filter(m=>!(m.alt_text||'').trim());
+R.acc.noAlt=noAltLib.length;
+R.acc.libNoAlt=noAltLib.map(mref).sort((a,b)=>b.w.length-a.w.length);
 try{const r=await fetch(W+'users?per_page=5');R.dades.users=r.ok?(await r.json()).map(u=>u.slug):[];}catch(e){R.dades.users=[];}
 try{const r=await fetch(W+'comments?per_page=1');R.dades.comments=r.ok?+(r.headers.get('X-WP-Total')||0):0;}catch(e){R.dades.comments=0;}
 const sensRe=/(llist(a|at) (d'|de )?(admes|exclos|alumn)|admesos|exclosos|barem|baremaci|qualificacions|notes d|resultats d|adjudicaci|expedient|sanci|expulsi|beques|ajuts|justificaci[oó] (d'?)?abs[eè]ncia|matr[ií]cula.*alumn)/i;
-R.dades.sens=media.filter(m=>!m.mime_type.startsWith('image/')&&sensRe.test(T(m.title.rendered)+' '+m.source_url)).map(m=>({t:T(m.title.rendered),u:m.source_url,d:(m.date||'').slice(0,10)}));
-R.cad={old:[],stale:[],dups:[]};
-media.filter(m=>!m.mime_type.startsWith('image/')).forEach(m=>{const t=T(m.title.rendered);if(oldCourse(t+' '+m.source_url.split('/').pop()))R.cad.old.push({t,u:m.source_url});});
-pages.forEach(p=>{if(now-new Date(p.modified)>2*365*864e5)R.cad.stale.push({t:T(p.title.rendered),m:p.modified.slice(0,10),e:edit(p.id)});});
-const g={};media.filter(m=>!m.mime_type.startsWith('image/')).forEach(m=>{const k=T(m.title.rendered).toLowerCase().replace(/\s*\(\d+\)\s*$/,'').replace(/[-_ ]\d{1,2}$/g,'').replace(/[-_ ]\d{1,2}$/g,'').trim();g[k]=(g[k]||0)+1;});
-R.cad.dups=Object.entries(g).filter(([k,n])=>n>2).map(([t,n])=>({t,n})).sort((a,b)=>b.n-a.n).slice(0,10);
-R.img={heavy:imgs.filter(m=>(m.media_details?.filesize||0)>1e6).map(m=>({f:m.source_url.split('/').pop(),mb:+(m.media_details.filesize/1e6).toFixed(1),u:m.source_url})).sort((a,b)=>b.mb-a.mb),heic:imgs.filter(m=>/heic|heif/i.test(m.mime_type+m.source_url)).length};
-R.img.heavyN=R.img.heavy.length;R.img.heavy=R.img.heavy.slice(0,10);
-const bad=[];const arr=o.head?[...internal].slice(0,300):[];
-if(o.head)o.progress('Comprovant enllaços interns…');
-for(let i=0;i<arr.length;i+=10){await Promise.all(arr.slice(i,i+10).map(async([u,t])=>{try{const s=await o.head(u);if(s>=400)bad.push({u,t,s});}catch(e){}}));}
+R.dades.sens=files.filter(m=>sensRe.test(T(m.title.rendered)+' '+m.source_url)).map(mref);
+R.cad={old:files.filter(m=>oldCourse(T(m.title.rendered)+' '+fn(m.source_url))).map(mref),stale:pages.filter(p=>now-new Date(p.modified)>2*365*864e5).map(p=>({t:T(p.title.rendered),l:p.link,e:edit(p.id),m:p.modified.slice(0,10)})),dups:[]};
+const g={};files.forEach(m=>{const k=T(m.title.rendered).toLowerCase().replace(/\s*\(\d+\)\s*$/,'').replace(/[-_ ]\d{1,2}$/g,'').replace(/[-_ ]\d{1,2}$/g,'').trim();(g[k]=g[k]||[]).push(m);});
+R.cad.dups=Object.entries(g).filter(([k,a])=>a.length>2).map(([t,a])=>({t,files:a.map(mref)})).sort((a,b)=>b.files.length-a.files.length).slice(0,15);
+R.cad.unused=files.filter(m=>!where(m).length).length;
+R.img={heavy:imgs.filter(m=>(m.media_details?.filesize||0)>1e6).sort((a,b)=>b.media_details.filesize-a.media_details.filesize).map(m=>({...mref(m),mb:+(m.media_details.filesize/1e6).toFixed(1)})),heic:imgs.filter(m=>/heic|heif/i.test(m.mime_type+m.source_url)).map(mref)};
+R.img.heavyN=R.img.heavy.length;
+const bad=[];const arr=o.head?[...internal].slice(0,400):[];
+if(o.head)o.progress('Comprovant els enllaços…');
+for(let i=0;i<arr.length;i+=10){await Promise.all(arr.slice(i,i+10).map(async([u,ref])=>{try{const s=await o.head(u);if(s>=400)bad.push({...ref,u,s});}catch(e){}}));}
 R.links={checked:arr.length,bad};
 const dec=s=>{if(!s)return'';if(/^<FEFF/i.test(s)){const h=s.slice(5,-1);let o='';for(let i=0;i+3<h.length;i+=4)o+=String.fromCharCode(parseInt(h.substr(i,4),16));return o;}if(s[0]==='<'){const h=s.slice(1,-1);let o='';for(let i=0;i+1<h.length;i+=2)o+=String.fromCharCode(parseInt(h.substr(i,2),16));return o;}let o=s.slice(1,-1).replace(/\\([()\\])/g,'$1');if(o.charCodeAt(0)===254&&o.charCodeAt(1)===255){let r='';for(let i=2;i+1<o.length;i+=2)r+=String.fromCharCode(o.charCodeAt(i)*256+o.charCodeAt(i+1));return r;}try{return decodeURIComponent(escape(o));}catch(e){return o;}};
-o.progress('Llegint metadades dels PDF…');
-const pdfs=!o.file?[]:media.filter(m=>m.mime_type==='application/pdf'&&(m.media_details?.filesize||0)<25e6).slice(0,150);
+o.progress('Obrint els PDF…');
+const pdfs=!o.file?[]:files.filter(m=>m.mime_type==='application/pdf'&&(m.media_details?.filesize||0)<25e6).slice(0,200);
 const pr=[];
-for(let i=0;i<pdfs.length;i+=6){await Promise.all(pdfs.slice(i,i+6).map(async m=>{try{const b=await o.file(m.source_url,{Range:'bytes=0-'}).then(r=>r.arrayBuffer());const t=new TextDecoder('latin1').decode(new Uint8Array(b));const gt=k=>{const x=t.match(new RegExp('/'+k+'\\s*(\\((?:\\\\.|[^\\\\)])*\\)|<[0-9A-Fa-f]+>)'));if(x)return dec(x[1]).trim();if(k==='Author'){const z=t.match(/<dc:creator>\s*<rdf:Seq>\s*<rdf:li[^>]*>([^<]+)/);if(z)try{return decodeURIComponent(escape(z[1])).trim();}catch(e){return z[1].trim();}}return '';};pr.push({f:T(m.title.rendered),u:m.source_url,author:gt('Author'),creator:gt('Creator'),producer:gt('Producer')});}catch(e){}}));}
-R.meta={pdfs:pr.length,authors:{},tools:{},withAuthor:pr.filter(p=>p.author).map(p=>({f:p.f,a:p.author,u:p.u}))};
-pr.forEach(p=>{if(p.author)R.meta.authors[p.author]=(R.meta.authors[p.author]||0)+1;const tl=(p.creator+' '+p.producer).toLowerCase();[['ilovepdf','iLovePDF'],['smallpdf','Smallpdf'],['canva','Canva'],['gamma','Gamma (IA)'],['copilot','Copilot (IA)'],['chatgpt','ChatGPT (IA)'],['openai','OpenAI (IA)'],['beautiful.ai','Beautiful.ai (IA)']].forEach(([k,n])=>{if(tl.includes(k)){R.ia.ext[n]=(R.ia.ext[n]||0)+1;if(/IA/.test(n))R.ia.pdfAI.push({f:p.f,n});}});});
-o.progress('Llegint metadades de les imatges…');
+for(let i=0;i<pdfs.length;i+=6){o.progress('Obrint els PDF… '+Math.min(i+6,pdfs.length)+'/'+pdfs.length);await Promise.all(pdfs.slice(i,i+6).map(async m=>{try{const b=await o.file(m.source_url,{Range:'bytes=0-'}).then(r=>r.arrayBuffer());const t=new TextDecoder('latin1').decode(new Uint8Array(b));const gt=k=>{const x=t.match(new RegExp('/'+k+'\\s*(\\((?:\\\\.|[^\\\\)])*\\)|<[0-9A-Fa-f]+>)'));if(x)return dec(x[1]).trim();if(k==='Author'){const z=t.match(/<dc:creator>\s*<rdf:Seq>\s*<rdf:li[^>]*>([^<]+)/);if(z)try{return decodeURIComponent(escape(z[1])).trim();}catch(e){return z[1].trim();}}return '';};pr.push({m,author:gt('Author'),creator:gt('Creator'),producer:gt('Producer')});}catch(e){}}));}
+R.meta={pdfs:pr.length,authors:{},withAuthor:pr.filter(p=>p.author).map(p=>({...mref(p.m),a:p.author}))};
+pr.forEach(p=>{if(p.author)R.meta.authors[p.author]=(R.meta.authors[p.author]||0)+1;const tl=(p.creator+' '+p.producer).toLowerCase();[['ilovepdf','iLovePDF'],['smallpdf','Smallpdf'],['canva','Canva'],['gamma','Gamma (IA)'],['copilot','Copilot (IA)'],['chatgpt','ChatGPT (IA)'],['openai','OpenAI (IA)'],['beautiful.ai','Beautiful.ai (IA)']].forEach(([k,n])=>{if(tl.includes(k)){R.ia.ext[n]=(R.ia.ext[n]||0)+1;R.ia.extFiles.push({...mref(p.m),n});if(/IA/.test(n))R.ia.pdfAI.push({...mref(p.m),n});}});});
 function exif(u8){let i=-1;for(let k=0;k<u8.length-6;k++){if(u8[k]==69&&u8[k+1]==120&&u8[k+2]==105&&u8[k+3]==102&&u8[k+4]==0&&u8[k+5]==0){i=k+6;break;}}if(i<0)return null;const dv=new DataView(u8.buffer,u8.byteOffset+i);const le=dv.getUint16(0)==0x4949;const r16=o=>dv.getUint16(o,le),r32=o=>dv.getUint32(o,le);const str=(o,n)=>{let s='';for(let j=0;j<n&&j<200;j++){const c=dv.getUint8(o+j);if(!c)break;s+=String.fromCharCode(c);}return s;};const out={};const ifd=(off,f)=>{const n=r16(off);for(let k=0;k<n&&k<200;k++){const e=off+2+k*12;const tag=r16(e),type=r16(e+2),cnt=r32(e+4);const vo=(cnt>4||type==5)?r32(e+8):e+8;f(tag,type,cnt,vo);}};
  try{let gps=0;ifd(r32(4),(tag,type,cnt,vo)=>{if(tag==0x010F)out.make=str(vo,cnt);if(tag==0x0110)out.model=str(vo,cnt);if(tag==0x013B)out.artist=str(vo,cnt);if(tag==0x8825)gps=r32(vo);});if(gps){const g={};ifd(gps,(tag,type,cnt,vo)=>{if(tag==1)g.a=str(vo,2);if(tag==3)g.b=str(vo,2);if(tag==2||tag==4){const v=[0,1,2].map(j=>r32(vo+j*8)/(r32(vo+j*8+4)||1));g[tag]=v[0]+v[1]/60+v[2]/3600;}});if(g[2])out.gps=((g.a=='S'?-1:1)*g[2]).toFixed(4)+','+((g.b=='W'?-1:1)*g[4]).toFixed(4);}}catch(e){}return out;}
 const aiSig=/(trainedAlgorithmicMedia|compositeWithTrainedAlgorithmicMedia)/;
-const genRe=/(GPT-[\w.]+|ChatGPT|DALL[·.\-]?E[\w ]*|Adobe Firefly|Firefly|Gemini|Imagen[\w ]*|Midjourney|Stable Diffusion|Microsoft Designer|Copilot|Bing Image Creator|Ideogram|Leonardo)/;
+const genAI=/(GPT-[\w.]+|ChatGPT|DALL[·.\-]?E[\w ]*|Adobe Firefly|Firefly|Gemini|Imagen[\w ]*|Midjourney|Stable Diffusion|Microsoft Designer|Copilot|Bing Image Creator|Ideogram|Leonardo)/;
 const ir=[];
-if(o.file)for(let i=0;i<imgs.length;i+=12){o.progress('Llegint metadades de les imatges… '+Math.min(i+12,imgs.length)+'/'+imgs.length);await Promise.all(imgs.slice(i,i+12).map(async m=>{try{const b=await o.file(m.source_url,{Range:'bytes=0-262143'}).then(r=>r.arrayBuffer());const u8=new Uint8Array(b);const s=new TextDecoder('latin1').decode(u8);const f=m.source_url.split('/').pop();const e=exif(u8)||{};if(e.make||e.gps||e.artist)ir.push({f,u:m.source_url,...e});
- if(aiSig.test(s)||/c2pa/.test(s)&&genRe.test(s)){const gm=s.match(genRe);R.ia.c2pa.push({f,u:m.source_url,g:gm?gm[0]:'IA (sense nom)',d:(m.date||'').slice(0,10)});}
- if(/canva/i.test(s))R.ia.ext['Canva']=(R.ia.ext['Canva']||0)+1;}catch(e){}}));}
-R.meta.imgs=imgs.length;R.meta.exif=ir.length;R.meta.gps=ir.filter(x=>x.gps).map(x=>({f:x.f,u:x.u,gps:x.gps,cam:((x.make||'')+' '+(x.model||'')).trim()}));R.meta.artist=ir.filter(x=>x.artist).map(x=>({f:x.f,a:x.artist}));
+if(o.file)for(let i=0;i<imgs.length;i+=12){o.progress('Obrint les fotos… '+Math.min(i+12,imgs.length)+'/'+imgs.length);await Promise.all(imgs.slice(i,i+12).map(async m=>{try{const b=await o.file(m.source_url,{Range:'bytes=0-262143'}).then(r=>r.arrayBuffer());const u8=new Uint8Array(b);const s=new TextDecoder('latin1').decode(u8);const e=exif(u8)||{};if(e.make||e.gps||e.artist)ir.push({...mref(m),...e});
+ if(aiSig.test(s)||/c2pa/.test(s)&&genAI.test(s)){const gm=s.match(genAI);R.ia.c2pa.push({...mref(m),g:gm?gm[0]:'IA'});}
+ if(/canva/i.test(s)){R.ia.ext['Canva']=(R.ia.ext['Canva']||0)+1;R.ia.extFiles.push({...mref(m),n:'Canva'});}}catch(e){}}));}
+R.meta.imgs=imgs.length;R.meta.exif=ir.length;R.meta.gps=ir.filter(x=>x.gps);R.meta.artist=ir.filter(x=>x.artist);
 R.meta.cams=[...new Set(ir.map(x=>((x.make||'')+' '+(x.model||'')).trim()).filter(Boolean))].slice(0,8);
-R.ia.names=media.filter(m=>/(chatgpt|dall[-_ ]?e|midjourney|firefly|gemini_generated|copilot|stable[-_ ]?diffusion|ai[-_ ]generated|ideogram|leonardo)/i.test(m.source_url)).map(m=>m.source_url.split('/').pop());
+R.ia.names=media.filter(m=>/(chatgpt|dall[-_ ]?e|midjourney|firefly|gemini_generated|copilot|stable[-_ ]?diffusion|ai[-_ ]generated|ideogram|leonardo)/i.test(m.source_url)).map(mref);
 return R;
 }
 </script>
@@ -203,152 +217,140 @@ const A=R.acc||{},D=R.dades||{},M=R.meta||{},I=R.ia||{},C=R.cad||{},G=R.img||{},
 const n=x=>(x||[]).length;
 const noAltP=pct(A.noAlt,A.imgs);
 const dHard=n(D.dni)+n(D.iban)+n(D.tel)+n(D.emails)+n(D.naix);
-const dSoft=n(D.sens)+(D.drive?1:0)+(D.photoPosts?1:0)+n(D.tables)+n(D.users);
-const extN=Object.keys(I.ext||{}).length;
+const extN=n(I.extFiles);
 const st={
-dades:dHard?'r':dSoft?'a':'g',
+dades:dHard?'r':(n(D.sens)||n(D.driveList)||n(D.photoList)||n(D.tables)||n(D.users))?'a':'g',
 meta:R.partial?'n':(n(M.gps)||n(M.artist))?'r':n(M.withAuthor)?'a':'g',
 ia:(n(I.c2pa)||n(I.leftovers)||n(I.links)||!n(I.decl)||extN)?'a':'g',
-acc:(noAltP>10||n(A.skips)||n(A.generic))?'a':'g',
-img:(G.heavyN||G.heic)?'a':'g',
+acc:(noAltP>10||n(A.pagesNoAlt)||n(A.skips)||n(A.generic))?'a':'g',
+img:(G.heavyN||n(G.heic))?'a':'g',
 cad:(n(C.old)||n(C.dups)||n(C.stale))?'a':'g',
 links:R.partial?'n':n(L.bad)>5?'r':n(L.bad)?'a':'g'};
 const S={r:'Urgent',a:'Cal mirar-ho',g:'Tot bé',n:'No revisat'};
 const blocks=[
-['dades','Dades personals',dHard?`Hi ha ${dHard} dades personals visibles a la web`:`No n'hi ha cap a la vista, però cal revisar ${n(D.sens)} documents i ${D.drive||0} enllaços`],
-['meta','Informació amagada als fitxers',`${n(M.withAuthor)} PDF diuen qui els va fer · ${n(M.gps)} fotos diuen on es van fer`],
-['ia','Intel·ligència artificial',`${n(I.c2pa)} imatge${n(I.c2pa)==1?'':'s'} feta${n(I.c2pa)==1?'':'s'} amb IA sense avisar-ho`],
-['acc','Accessibilitat',`${noAltP}% de les fotos sense descripció per a persones cegues`],
-['img','Fotos massa pesades',`${G.heavyN||0} fotos de més d'1 MB · ${G.heic||0} en format d'iPhone que no es veu a tot arreu`],
-['cad','Documents antics o repetits',`${n(C.old)} documents de cursos passats · ${n(C.dups)} documents repetits`],
-['links','Enllaços que no funcionen',R.partial?'No s\'ha pogut revisar':`${n(L.bad)} de ${L.checked||0} enllaços no funcionen`]];
+['dades','Dades personals',dHard?`${dHard} dades personals visibles`:`Cap dada visible · ${n(D.sens)} documents i ${n(D.driveList)} enllaços a Drive per revisar`],
+['meta','Informació amagada als fitxers',R.partial?'No revisat':`${n(M.withAuthor)} PDF amb el nom de qui els va fer · ${n(M.gps)} fotos amb el lloc`],
+['ia','Intel·ligència artificial',`${n(I.c2pa)} imatge${n(I.c2pa)==1?'':'s'} feta${n(I.c2pa)==1?'':'s'} amb IA · ${n(I.decl)?'hi ha pàgines que en parlen':'cap pàgina que n\'expliqui l\'ús'}`],
+['acc','Accessibilitat',`${noAltP}% de fotos sense descripció · ${n(A.skips)} títols desordenats · ${n(A.generic)} enllaços «aquí»`],
+['img','Fotos massa pesades',`${G.heavyN||0} fotos de més d'1 MB · ${n(G.heic)} en format d'iPhone`],
+['cad','Documents antics o repetits',`${n(C.old)} de cursos passats · ${n(C.dups)} repetits · ${C.unused||0} sense enllaçar`],
+['links','Enllaços que no funcionen',R.partial?'No revisat':`${n(L.bad)} de ${L.checked||0} no funcionen`]];
 const order={r:0,a:1,g:2,n:3};
 const worst=[...blocks].sort((x,y)=>order[st[x[0]]]-order[st[y[0]]]);
-let key,keyTxt;
-if(dHard){key=dHard;keyTxt='dades personals que qualsevol pot veure a la web';}
-else if(noAltP>50){key=noAltP+'%';keyTxt=`de les fotos no tenen descripció: una persona cega no sap què hi ha (${A.noAlt} de ${A.imgs})`;}
-else if(n(I.c2pa)){key=n(I.c2pa);keyTxt='imatges fetes amb IA sense indicar-ho';}
-else{key=n(M.withAuthor);keyTxt='PDF que porten amagat el nom de qui els va fer';}
 const nR=Object.values(st).filter(v=>v==='r').length,nA=Object.values(st).filter(v=>v==='a').length;
-const title=dHard?'La web mostra dades personals: cal retirar-les avui':nR?`La web té ${nR} problema${nR>1?'es':''} urgent${nR>1?'s':''} i ${nA} coses a millorar`:nA?`Res urgent, però hi ha ${nA} coses a millorar`:'La web està en bon estat';
-const how=(steps)=>`<div class="how"><b>Com arreglar-ho</b><ol>${steps.map(s=>`<li>${s}</li>`).join('')}</ol></div>`;
+const title=dHard?'La web mostra dades personals':nR?`${nR} problema${nR>1?'es':''} urgent${nR>1?'s':''} i ${nA} apartats per revisar`:nA?`Res urgent; ${nA} apartats per revisar`:'La web està en bon estat';
+const B=(href,txt)=>href?`<a class="btn" href="${url(href)}" target="_blank" rel="noopener">${txt}</a>`:'';
+const page=r=>r?`<b>${esc(r.t)}</b>${r.k?` <span class="note">(${esc(r.k)}${r.feat?', imatge destacada':''})</span>`:''}<div class="acts">${B(r.l,'Veure')}${B(r.e,'Edita')}</div>`:'';
+const file=m=>`<b class="fn">${esc(m.f)}</b>${m.t&&m.t!==m.f?`<div class="note">${esc(m.t)}</div>`:''}<div class="acts">${B(m.u,'Obre el fitxer')}${B(m.e,'Edita el fitxer')}</div>`;
+const where=w=>w&&w.length?w.map(page).join('<hr class="sep">'):'<span class="note">No surt a cap pàgina ni notícia (pot ser un fitxer oblidat)</span>';
+const list=(cols,rows,lim=10)=>{if(!rows.length)return'';const head=`<thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>`;const first=`<table class="stack">${head}<tbody>${rows.slice(0,lim).join('')}</tbody></table>`;return rows.length>lim?first+`<details class="more"><summary>Mostra'n ${rows.length-lim} més</summary><table class="stack">${head}<tbody>${rows.slice(lim).join('')}</tbody></table></details>`:first;};
+const how=s=>`<div class="how"><b>Com arreglar-ho</b><ol>${s.map(x=>`<li>${x}</li>`).join('')}</ol></div>`;
 const why=t=>`<p class="why">${t}</p>`;
-const tasks=[];
-if(dHard)tasks.push(['Avui','Treure les dades personals que surten a la web','#s-dades']);
-if(n(D.sens))tasks.push(['Aquesta setmana',`Revisar ${n(D.sens)} documents de llistes o barems i treure els que ja no calen`,'#s-dades']);
-if(D.drive)tasks.push(['Aquesta setmana',`Comprovar qui pot obrir els ${D.drive} documents de Google Drive enllaçats`,'#s-dades']);
-if(n(M.gps))tasks.push(['Aquesta setmana',`Treure ${n(M.gps)} fotos que diuen on es van fer`,'#s-meta']);
-if(n(I.c2pa))tasks.push(['Aquesta setmana',`Indicar que ${n(I.c2pa)==1?'una imatge està feta':n(I.c2pa)+' imatges estan fetes'} amb IA`,'#s-ia']);
-if(D.photoPosts)tasks.push(['Aquest mes',`Confirmar que hi ha autorització de les famílies per a les fotos de ${D.photoPosts} notícies`,'#s-dades']);
-if(n(M.withAuthor))tasks.push(['Aquest mes',`Tornar a pujar ${n(M.withAuthor)} PDF sense el nom de qui els va fer`,'#s-meta']);
-if(noAltP>10)tasks.push(['A poc a poc',`Posar una descripció a les fotos (${A.noAlt} pendents), començant per les més vistes`,'#s-acc']);
-if(G.heic||G.heavyN)tasks.push(['A poc a poc','Canviar les fotos pesades o en format d\'iPhone per JPG','#s-img']);
-if(n(C.old)||n(C.dups))tasks.push(['A poc a poc','Esborrar documents de cursos passats i còpies repetides','#s-cad']);
-const editBtn=e=>e?`<a class="btn" href="${url(e)}" target="_blank" rel="noopener">Edita la pàgina</a>`:'';
-const openBtn=u=>u?`<a class="btn" href="${url(u)}" target="_blank" rel="noopener">Obre</a>`:'';
 const chk=(ok,txt)=>`<td class="${ok?'ok':'wa'}">${ok?'✓ ':'! '}${esc(txt)}</td>`;
+const sub=(t,p)=>`<h3>${t}</h3>${p?`<p>${p}</p>`:''}`;
 let h=`<nav class="scroll" aria-label="Seccions"><a href="#resum">Resum</a>${blocks.map(b=>`<a href="#s-${b[0]}">${esc(b[1])}</a>`).join('')}</nav>
 <div class="band" id="resum"><h1>${esc(title)}</h1>
 <div class="meta"><span>${esc(R.name)}</span><span>${esc(R.site)}</span><span>Revisat el ${esc(R.date)}</span><span>${R.counts?.pages||0} pàgines, ${R.counts?.posts||0} notícies i ${R.counts?.media||0} fitxers</span></div>
-<div class="hero"><div><div class="key"><b>${esc(key)}</b><span>${esc(keyTxt)}</span></div>
-<p class="note" style="margin-top:10px">Aquest informe l'ha fet una eina automàtica. Assenyala coses a revisar; la decisió final és del centre.</p></div>
-<div class="blocks">${worst.map(b=>`<a class="blk" href="#s-${b[0]}"><span class="dot ${st[b[0]]}"></span><span><b>${esc(b[1])}</b><small>${esc(b[2])}</small></span><span class="st ${st[b[0]]}">${S[st[b[0]]]}</span></a>`).join('')}</div></div>
-${tasks.length?`<h2 style="margin-top:30px">Llista de feina</h2><p>Per ordre d'importància. Cada punt porta a l'explicació i als passos.</p><table class="stack"><thead><tr><th>Quan</th><th>Què cal fer</th><th></th></tr></thead><tbody>${tasks.map(t=>`<tr><td style="white-space:nowrap"><b>${esc(t[0])}</b></td><td>${esc(t[1])}</td><td><a class="btn" href="${t[2]}">Com fer-ho</a></td></tr>`).join('')}</tbody></table>`:''}
-<p class="note" style="margin-top:14px">On diu «Edita la pàgina», el botó obre l'escriptori de WordPress. Cal haver entrat abans amb l'usuari d'administració de la web.</p></div>`;
+<div class="blocks" style="margin-top:20px;max-width:900px">${worst.map(b=>`<a class="blk" href="#s-${b[0]}"><span class="dot ${st[b[0]]}"></span><span><b>${esc(b[1])}</b><small>${esc(b[2])}</small></span><span class="st ${st[b[0]]}">${S[st[b[0]]]}</span></a>`).join('')}</div>
+<p class="note" style="margin-top:14px">Cada apartat diu on és cada cosa: «Veure» obre la pàgina pública i «Edita» l'obre a l'escriptori de WordPress (cal haver entrat amb l'usuari d'administració). L'informe és automàtic: assenyala coses per revisar; la decisió és del centre.</p></div>`;
 
 h+=`<section class="sec band" id="s-dades"><div class="lead"><h2>Dades personals</h2><span class="st ${st.dades}">${S[st.dades]}</span></div>
-${why('La web del centre és pública: qualsevol persona, i també els cercadors com Google, pot veure i guardar el que s\'hi publica. Per llei (protecció de dades), no s\'hi poden publicar dades personals d\'alumnes, famílies o personal si no és imprescindible i per un temps limitat.')}
-<table class="stack"><thead><tr><th>Què hem buscat</th><th>Resultat</th></tr></thead><tbody>
-<tr><td>Números de DNI o NIE</td>${chk(!n(D.dni),n(D.dni)?n(D.dni)+' trobats':'Cap')}</tr>
-<tr><td>Telèfons mòbils</td>${chk(!n(D.tel),n(D.tel)?n(D.tel)+' trobats':'Cap')}</tr>
-<tr><td>Correus personals (no del centre)</td>${chk(!n(D.emails),n(D.emails)?n(D.emails)+' trobats':'Cap')}</tr>
-<tr><td>Comptes bancaris</td>${chk(!n(D.iban),n(D.iban)?n(D.iban)+' trobats':'Cap')}</tr>
-<tr><td>Dates de naixement</td>${chk(!n(D.naix),n(D.naix)?n(D.naix)+' pàgines':'Cap')}</tr>
-<tr><td>Documents amb nom de llista, barem o justificant</td>${chk(!n(D.sens),n(D.sens)?n(D.sens)+' per revisar':'Cap')}</tr>
-<tr><td>Enllaços a documents de Google Drive o Forms</td>${chk(!D.drive,D.drive?D.drive+' per revisar':'Cap')}</tr>
-<tr><td>Notícies amb fotos (poden sortir alumnes)</td>${chk(!D.photoPosts,D.photoPosts?D.photoPosts+' notícies':'Cap')}</tr>
-<tr><td>Taules llargues (poden ser llistes de noms)</td>${chk(!n(D.tables),n(D.tables)?(D.tables||[]).map(t=>t.t).join(', '):'Cap')}</tr>
+${why('La web és pública: qualsevol persona, i també Google, pot veure i guardar el que s\'hi publica. No s\'hi poden publicar dades personals d\'alumnes, famílies o personal si no és imprescindible i durant un temps limitat.')}
+<table class="stack"><thead><tr><th>Què hem buscat al text de les pàgines i notícies</th><th>Resultat</th></tr></thead><tbody>
+<tr><td>Números de DNI o NIE</td>${chk(!n(D.dni),n(D.dni)||'Cap')}</tr>
+<tr><td>Telèfons mòbils</td>${chk(!n(D.tel),n(D.tel)||'Cap')}</tr>
+<tr><td>Correus personals (no del centre ni de l'XTEC)</td>${chk(!n(D.emails),n(D.emails)||'Cap')}</tr>
+<tr><td>Comptes bancaris</td>${chk(!n(D.iban),n(D.iban)||'Cap')}</tr>
+<tr><td>Dates de naixement</td>${chk(!n(D.naix),n(D.naix)||'Cap')}</tr>
+<tr><td>Documents amb nom de llista, barem o justificant</td>${chk(!n(D.sens),n(D.sens)||'Cap')}</tr>
+<tr><td>Enllaços a Google Drive, Forms o OneDrive</td>${chk(!n(D.driveList),n(D.driveList)||'Cap')}</tr>
+<tr><td>Notícies amb fotos</td>${chk(!n(D.photoList),n(D.photoList)||'Cap')}</tr>
+<tr><td>Taules llargues (poden ser llistes de noms)</td>${chk(!n(D.tables),n(D.tables)||'Cap')}</tr>
+<tr><td>Llista d'usuaris de WordPress visible</td>${chk(!n(D.users),n(D.users)?D.users.join(', '):'No')}</tr>
 </tbody></table>
-${dHard?`<h3>Dades trobades</h3>${tbl(['On és','Dada'],[...(D.dni||[]),...(D.tel||[]),...(D.emails||[]),...(D.iban||[])].map(x=>`<tr><td>${esc(x.t)}</td><td>${esc(x.v)}</td></tr>`))}`:''}
-${n(D.sens)?`<h3>Documents per revisar</h3><p>Pel nom, poden contenir dades d'alumnes. Obre'ls i mira què hi surt.</p>${tbl(['Document','Pujat el',''],(D.sens||[]).map(x=>`<tr><td>${esc(x.t)}</td><td style="white-space:nowrap">${esc(x.d)}</td><td>${openBtn(x.u)}</td></tr>`))}`:''}
+${dHard?sub('Dades trobades','La dada surt amb el text del voltant perquè la trobis ràpid dins la pàgina (Ctrl+F).')+list(['Dada','Text on surt','On és'],[...(D.dni||[]).map(x=>['DNI/NIE',x]),...(D.tel||[]).map(x=>['Telèfon',x]),...(D.emails||[]).map(x=>['Correu',x]),...(D.iban||[]).map(x=>['Compte bancari',x]),...(D.naix||[]).map(x=>['Data de naixement',x])].map(([k,x])=>`<tr><td><b>${esc(k)}</b><div>${esc(x.v||'')}</div></td><td><i>«…${esc(x.c||'')}…»</i></td><td>${page(x)}</td></tr>`)):''}
+${n(D.sens)?sub('Documents per revisar','Pel nom, poden contenir dades d\'alumnes. Obre\'ls i mira què hi surt.')+list(['Document','Pujat el','Enllaçat a'],(D.sens||[]).map(x=>`<tr><td>${file(x)}</td><td style="white-space:nowrap">${esc(x.d)}</td><td>${where(x.w)}</td></tr>`)):''}
+${n(D.driveList)?sub('Enllaços a documents de Google Drive o Forms','Des de fora no podem saber qui els pot obrir. Revisa\'ls un per un.')+list(['Document enllaçat','Text de l\'enllaç','A la pàgina'],(D.driveList||[]).map(x=>`<tr><td>${B(x.href,'Obre el document')}</td><td>${esc(x.txt)}</td><td>${page(x)}</td></tr>`)):''}
+${n(D.tables)?sub('Taules llargues')+list(['Primera fila de la taula','Files','A la pàgina'],(D.tables||[]).map(x=>`<tr><td>${esc(x.h)}</td><td class="n">${x.n}</td><td>${page(x)}</td></tr>`)):''}
+${n(D.photoList)?sub('Notícies amb fotos','Comprova que hi ha autorització de drets d\'imatge de l\'alumnat que hi surt.')+list(['Notícia','Fotos'],(D.photoList||[]).map(x=>`<tr><td>${page(x)}</td><td class="n">${x.n}</td></tr>`)):''}
 ${how([
-'<b>Documents de llistes i barems:</b> si el termini ja ha passat, treu-los. A l\'escriptori de WordPress, ves a <b>Mèdia › Biblioteca</b>, cerca el document pel nom, obre\'l i clica <b>Suprimeix permanentment</b>. Abans, treu l\'enllaç de la pàgina on surt.',
-'<b>Llistes que s\'han de publicar</b> (admesos, notes de proves): que hi surti només el número de sol·licitud o les inicials, mai nom complet i DNI junts.',
-'<b>Enllaços a Google Drive:</b> obre cada enllaç, clica <b>Comparteix</b> i mira què diu a «Accés general». Si és «Qualsevol persona amb l\'enllaç» i el document té dades personals, canvia-ho a <b>Restringit</b>.',
-'<b>Fotos d\'alumnes:</b> comprova que les famílies han signat l\'autorització de drets d\'imatge d\'aquest curs. Si en falta alguna, treu la foto o difumina la cara.',
-'<b>Dubtes:</b> consulta la delegada o el delegat de protecció de dades del Departament.'])}
-</section>`;
+'<b>Dades al text:</b> clica «Edita» a la pàgina indicada, cerca la dada (Ctrl+F) i esborra-la. Desa amb <b>Actualitza</b>.',
+'<b>Documents de llistes i barems:</b> si el termini ja ha passat, treu l\'enllaç de la pàgina («Edita») i després esborra el fitxer («Edita el fitxer» › <b>Suprimeix permanentment</b>). Si s\'ha de publicar, que només hi surtin números de sol·licitud o inicials, mai nom i DNI junts.',
+'<b>Enllaços a Google Drive:</b> obre cada document, clica <b>Comparteix</b> i mira «Accés general». Si diu «Qualsevol persona amb l\'enllaç» i el document té dades personals, canvia-ho a <b>Restringit</b>.',
+'<b>Fotos d\'alumnes:</b> comprova les autoritzacions de drets d\'imatge d\'aquest curs. Si en falta alguna, treu la foto o tapa la cara.',
+'<b>Dubtes:</b> consulta el delegat de protecció de dades del Departament.'])}</section>`;
 
 const auth=Object.entries(M.authors||{}).sort((a,b)=>b[1]-a[1]);
 h+=`<section class="sec band" id="s-meta"><div class="lead"><h2>Informació amagada als fitxers</h2><span class="st ${st.meta}">${S[st.meta]}</span></div>
-${why('Els PDF i les fotos porten informació que no es veu però que qualsevol pot llegir si es descarrega el fitxer: el nom de la persona que el va fer, el programa i, a les fotos fetes amb mòbil, sovint el lloc exacte on es van fer. És com deixar una etiqueta amb el nom enganxada a sota d\'un document.')}
+${why('Els PDF i les fotos porten informació que no es veu però que qualsevol pot llegir si es descarrega el fitxer: el nom de qui el va fer, el programa i, a les fotos de mòbil, el lloc exacte on es van fer.')}
 ${R.partial?'<p class="note">No s\'han pogut obrir els fitxers en aquesta revisió.</p>':`
-<div class="box"><b>${n(M.withAuthor)} de ${M.pdfs||0} PDF porten el nom de qui els va fer</b><div class="bar"><i style="width:${pct(n(M.withAuthor),M.pdfs)}%;background:var(--amb)"></i></div><span class="note">${n(M.gps)?n(M.gps)+' fotos diuen el lloc on es van fer.':'Cap foto diu el lloc on es va fer.'}</span></div>
-${auth.length?`<h3>Noms que apareixen</h3>${tbl(['Nom amagat al fitxer','Quants PDF'],auth.map(a=>`<tr><td>${esc(a[0])}</td><td class="n">${a[1]}</td></tr>`))}`:''}
-${n(M.withAuthor)?`<h3>Fitxers</h3>${tbl(['Document','Nom que porta',''],(M.withAuthor||[]).map(x=>`<tr><td>${esc(x.f)}</td><td>${esc(x.a)}</td><td>${openBtn(x.u)}</td></tr>`))}`:''}
-${n(M.gps)?`<h3>Fotos amb el lloc on es van fer</h3>${tbl(['Foto',''],(M.gps||[]).map(x=>`<tr><td>${esc(x.f)}</td><td>${openBtn(x.u)}</td></tr>`))}`:''}`}
+<p>Hem obert <b>${M.pdfs||0} PDF</b> i <b>${M.imgs||0} fotos</b>. <b>${n(M.withAuthor)} PDF</b> porten un nom de persona i <b>${n(M.gps)} fotos</b> porten el lloc on es van fer.</p>
+${auth.length?sub('Noms que apareixen')+`<p>${auth.map(a=>`<b>${esc(a[0])}</b> (${a[1]} PDF)`).join(' · ')}</p>`:''}
+${n(M.withAuthor)?sub('PDF amb nom de persona')+list(['Document','Nom amagat','Enllaçat a'],(M.withAuthor||[]).map(x=>`<tr><td>${file(x)}</td><td>${esc(x.a)}</td><td>${where(x.w)}</td></tr>`)):''}
+${n(M.gps)?sub('Fotos amb el lloc on es van fer')+list(['Foto','Coordenades','On surt'],(M.gps||[]).map(x=>`<tr><td>${file(x)}</td><td>${esc(x.gps)}</td><td>${where(x.w)}</td></tr>`)):''}
+${n(M.artist)?sub('Fotos amb nom d\'autor')+list(['Foto','Nom','On surt'],(M.artist||[]).map(x=>`<tr><td>${file(x)}</td><td>${esc(x.artist)}</td><td>${where(x.w)}</td></tr>`)):''}`}
 ${how([
-'<b>Per als PDF que ja hi ha:</b> obre el document original al Word, ves a <b>Fitxer › Informació › Inspecciona el document</b>, marca «Propietats del document i informació personal» i clica <b>Suprimeix-ho tot</b>. Torna a desar-lo en PDF.',
-'<b>Substitueix-lo a la web:</b> a <b>Mèdia › Biblioteca</b>, puja el PDF nou i canvia l\'enllaç a la pàgina. Després esborra el vell.',
-'<b>A partir d\'ara:</b> fes això abans de pujar qualsevol document. Amb Google Docs no cal, perquè no hi posa el nom.',
-'<b>Fotos amb el lloc:</b> al mòbil, entra a la configuració de la càmera i desactiva «Ubicació» o «Etiquetes de localització».'])}
-</section>`;
+'<b>PDF amb nom:</b> obre l\'original al Word, ves a <b>Fitxer › Informació › Inspecciona el document</b>, marca «Propietats del document i informació personal» i clica <b>Suprimeix-ho tot</b>. Desa\'l de nou en PDF.',
+'<b>Substitueix-lo:</b> a la pàgina indicada a «Enllaçat a», clica «Edita», canvia l\'enllaç pel PDF nou i, després, esborra el vell («Edita el fitxer» › Suprimeix permanentment).',
+'<b>Fotos amb el lloc:</b> treu-les i torna-les a pujar sense la ubicació. Al mòbil, desactiva la «Ubicació» a la configuració de la càmera.'])}</section>`;
 
 h+=`<section class="sec band" id="s-ia"><div class="lead"><h2>Intel·ligència artificial</h2><span class="st ${st.ia}">${S[st.ia]}</span></div>
-${why('Fer servir IA no està malament, però cal dir-ho. Les imatges fetes amb ChatGPT, Gemini o altres porten un segell digital invisible, i l\'eina el detecta. No intentem endevinar si un text està escrit amb IA, perquè els detectors s\'equivoquen sovint i podrien acusar algú injustament.')}
+${why('Fer servir IA no està malament, però cal dir-ho. Les imatges fetes amb ChatGPT, Gemini i similars porten un segell digital invisible que l\'eina detecta. No intentem endevinar si un text està fet amb IA: els detectors s\'equivoquen sovint.')}
 <table class="stack"><thead><tr><th>Què hem buscat</th><th>Resultat</th></tr></thead><tbody>
-<tr><td>Imatges fetes amb IA</td>${R.partial?'<td class="note">No revisat</td>':chk(!n(I.c2pa),n(I.c2pa)?(I.c2pa||[]).map(x=>x.g).join(', '):'Cap')}</tr>
-<tr><td>Textos copiats d'un xat d'IA sense repassar («Aquí tens…», «Espero que t'ajudi», [Insereix…])</td>${chk(!n(I.leftovers),n(I.leftovers)?n(I.leftovers)+' pàgines':'Cap')}</tr>
-<tr><td>Enllaços a xats d'IA per a l'alumnat</td>${chk(!n(I.links),n(I.links)?n(I.links)+' enllaços':'Cap')}</tr>
-<tr><td>Pàgina que expliqui com fa servir la IA el centre</td>${chk(!!n(I.decl),n(I.decl)?'Hi ha '+n(I.decl)+' pàgina que en parla. Comprova si és una explicació d\'ús.':'No n\'hi ha')}</tr>
-<tr><td>Documents passats per webs externes (iLovePDF, Canva…)</td>${R.partial?'<td class="note">No revisat</td>':chk(!extN,extN?Object.entries(I.ext).map(([k,v])=>k+' ('+v+')').join(', '):'Cap')}</tr>
+<tr><td>Imatges fetes amb IA</td>${R.partial?'<td class="note">No revisat</td>':chk(!n(I.c2pa),n(I.c2pa)||'Cap')}</tr>
+<tr><td>Textos copiats d'un xat d'IA sense repassar («Aquí tens…», «Espero que t'ajudi», [Insereix…])</td>${chk(!n(I.leftovers),n(I.leftovers)||'Cap')}</tr>
+<tr><td>Enllaços a xats d'IA</td>${chk(!n(I.links),n(I.links)||'Cap')}</tr>
+<tr><td>Pàgines que parlen d'intel·ligència artificial</td>${chk(!!n(I.decl),n(I.decl)||'Cap')}</tr>
+<tr><td>Fitxers fets amb webs externes (iLovePDF, Canva…)</td>${R.partial?'<td class="note">No revisat</td>':chk(!extN,extN||'Cap')}</tr>
 </tbody></table>
-${n(I.c2pa)?`<h3>Imatges fetes amb IA</h3>${tbl(['Imatge','Eina','Pujada el',''],(I.c2pa||[]).map(x=>`<tr><td>${esc(x.f)}</td><td>${esc(x.g)}</td><td>${esc(x.d)}</td><td>${openBtn(x.u)}</td></tr>`))}`:''}
-${n(I.leftovers)?`<h3>Textos per repassar</h3>${tbl(['Pàgina','Text',''],(I.leftovers||[]).map(x=>`<tr><td>${esc(x.t)}</td><td>${esc(x.v)}</td><td>${editBtn(x.e)}</td></tr>`))}`:''}
+${n(I.c2pa)?sub('Imatges fetes amb IA')+list(['Imatge','Eina','On surt'],(I.c2pa||[]).map(x=>`<tr><td>${file(x)}</td><td>${esc(x.g)}</td><td>${where(x.w)}</td></tr>`)):''}
+${n(I.leftovers)?sub('Textos per repassar')+list(['Text trobat','On és'],(I.leftovers||[]).map(x=>`<tr><td><i>«…${esc(x.c)}…»</i></td><td>${page(x)}</td></tr>`)):''}
+${n(I.links)?sub('Enllaços a xats d\'IA')+list(['Enllaç','On és'],(I.links||[]).map(x=>`<tr><td>${B(x.href,'Obre')} ${esc(x.txt)}</td><td>${page(x)}</td></tr>`)):''}
+${n(I.decl)?sub('Pàgines que parlen d\'IA','Comprova si alguna explica com fa servir la IA el centre.')+list(['Pàgina'],(I.decl||[]).map(x=>`<tr><td>${page(x)}</td></tr>`)):''}
+${extN?sub('Fitxers fets amb webs externes')+list(['Fitxer','Eina','On surt'],(I.extFiles||[]).map(x=>`<tr><td>${file(x)}</td><td>${esc(x.n)}</td><td>${where(x.w)}</td></tr>`)):''}
 ${how([
-'<b>Imatges fetes amb IA:</b> edita la pàgina on surt la imatge, clica-la i escriu al peu de foto «Imatge generada amb IA».',
-'<b>Pàgina d\'ús de la IA:</b> publica una pàgina breu que expliqui per a què fa servir la IA el centre, amb quines eines i com es protegeixen les dades. Es pot enllaçar al peu de la web.',
-'<b>Webs externes com iLovePDF o Canva:</b> no hi pugis documents amb dades personals. Si cal, fes servir les eines del compte del Departament (Google Workspace o Microsoft 365 del centre).'])}
-</section>`;
+'<b>Imatges fetes amb IA:</b> clica «Edita» a la pàgina on surt, selecciona la imatge i escriu al peu de foto «Imatge generada amb IA». Si és la imatge destacada d\'una notícia, posa-ho al text de la notícia.',
+'<b>Explicar l\'ús de la IA:</b> publica una pàgina breu que digui per a què fa servir la IA el centre, amb quines eines i com es protegeixen les dades.',
+'<b>Webs externes com iLovePDF o Canva:</b> no hi pugis documents amb dades personals. Fes servir les eines del compte del centre (Google Workspace o Microsoft 365).'])}</section>`;
 
 h+=`<section class="sec band" id="s-acc"><div class="lead"><h2>Accessibilitat</h2><span class="st ${st.acc}">${S[st.acc]}</span></div>
-${why('Les persones cegues fan servir un programa que els llegeix la web en veu alta. Si una foto no té descripció, el programa diu només «imatge» i no saben què hi ha. Les webs públiques han de ser accessibles.')}
-<div class="box"><b>${A.noAlt||0} de ${A.imgs||0} fotos no tenen descripció</b><div class="bar"><i style="width:${noAltP}%;background:var(--red)"></i></div></div>
-${n(A.skips)?`<h3>Pàgines amb els títols desordenats</h3><p>Els títols han d'anar en ordre (Títol 2, després Títol 3…), com un índex. Si se salta un nivell, el lector de veu s'hi perd.</p>${tbl(['Pàgina',''],(A.skips||[]).map(x=>`<tr><td>${esc(x.t)}</td><td>${editBtn(x.e)}</td></tr>`))}`:''}
-${n(A.generic)?`<h3>Enllaços que només diuen «aquí» o «clica»</h3><p>Llegits sols no diuen on porten.</p>${tbl(['Pàgina',''],(A.generic||[]).map(x=>`<tr><td>${esc(x.t)}</td><td>${editBtn(x.e)}</td></tr>`))}`:''}
+${why('Les persones cegues fan servir un programa que els llegeix la web en veu alta. Si una foto no té descripció, el programa diu només «imatge». Els títols desordenats i els enllaços que diuen només «aquí» també les desorienten.')}
+<div class="box"><b>${A.noAlt||0} de ${A.imgs||0} fotos de la biblioteca no tenen descripció</b><div class="bar"><i style="width:${noAltP}%;background:var(--amb)"></i></div><span class="note">${n(A.pagesNoAlt)} pàgines i notícies tenen fotos sense descripció.</span></div>
+${n(A.pagesNoAlt)?sub('Pàgines amb fotos sense descripció')+list(['Pàgina','Fotos sense descripció'],[...(A.pagesNoAlt||[])].sort((a,b)=>b.n-a.n).map(x=>`<tr><td>${page(x)}</td><td><b>${x.n}</b><div class="note fn">${x.files.map(esc).join(', ')}${x.n>x.files.length?'…':''}</div></td></tr>`)):''}
+${n(A.skips)?sub('Títols desordenats','El títol indicat salta un nivell respecte de l\'anterior.')+list(['Pàgina','Títol','Salt'],(A.skips||[]).map(x=>`<tr><td>${page(x)}</td><td>«${esc(x.h)}»</td><td style="white-space:nowrap">${esc(x.s)}</td></tr>`)):''}
+${n(A.generic)?sub('Enllaços que només diuen «aquí», «clica»…')+list(['Text de l\'enllaç','Porta a','A la pàgina'],(A.generic||[]).map(x=>{let f=x.href||'';try{f=decodeURIComponent(f.split('/').filter(Boolean).pop()||f);}catch(e){}return `<tr><td>«${esc(x.txt)}»</td><td class="fn">${B(x.href,'Obre')} ${esc(f)}</td><td>${page(x)}</td></tr>`;})):''}
+${n(A.libNoAlt)?`<details class="more"><summary>Totes les fotos de la biblioteca sense descripció (${n(A.libNoAlt)})</summary>${list(['Foto','On surt'],(A.libNoAlt||[]).map(x=>`<tr><td>${file(x)}</td><td>${where(x.w)}</td></tr>`),400)}</details>`:''}
 ${how([
-'<b>Descripció de les fotos:</b> a <b>Mèdia › Biblioteca</b>, clica una foto i omple el camp <b>Text alternatiu</b> amb una frase curta del que es veu (per exemple «Alumnes de 1r de batxillerat a la sortida de Montserrat»). Comença per les fotos de la portada i les pàgines fixes.',
-'<b>Títols desordenats:</b> edita la pàgina, clica el títol i, a la barra d\'eines, canvia\'n el nivell perquè vagin en ordre: Títol 2 per a les seccions i Títol 3 per a les subseccions.',
-'<b>Enllaços «aquí»:</b> canvia el text de l\'enllaç perquè digui on porta, per exemple «Calendari de les proves d\'accés (PDF)» en lloc de «clica aquí».'])}
-</section>`;
+'<b>Fotos sense descripció:</b> clica «Edita» a la pàgina, clica la foto i, a la columna de la dreta, omple <b>Text alternatiu</b> amb una frase curta del que es veu (per exemple «Alumnes de 1r de batxillerat a la sortida de Montserrat»). També es pot fer des de «Edita el fitxer» a la llista de la biblioteca.',
+'<b>Títols desordenats:</b> clica «Edita», clica el títol indicat i canvia\'n el nivell a la barra d\'eines perquè vagin en ordre (Títol 2, després Títol 3…).',
+'<b>Enllaços «aquí»:</b> canvia el text de l\'enllaç perquè digui on porta, per exemple «Calendari de les proves d\'accés (PDF)».'])}</section>`;
 
 h+=`<section class="sec band" id="s-img"><div class="lead"><h2>Fotos massa pesades</h2><span class="st ${st.img}">${S[st.img]}</span></div>
-${why('Les fotos fetes amb el mòbil pesen molt i fan que la web vagi lenta, sobretot des del mòbil. A més, les fotos d\'iPhone en format HEIC no es veuen als navegadors Chrome ni Edge: per a molta gent, aquestes fotos simplement no surten.')}
-<p><b>${G.heavyN||0} fotos pesen més d'1 MB</b> i <b>${G.heic||0} són en format HEIC</b>.</p>
-${n(G.heavy)?tbl(['Foto','Pes',''],(G.heavy||[]).map(x=>`<tr><td>${esc(x.f)}</td><td class="n">${esc(x.mb)} MB</td><td>${openBtn(x.u)}</td></tr>`)):''}
+${why('Les fotos de mòbil pesen molt i fan que la web vagi lenta. Les fotos d\'iPhone en format HEIC no es veuen a Chrome ni Edge: per a molta gent, no surten.')}
+${n(G.heic)?sub(`Fotos en format d'iPhone (HEIC): ${n(G.heic)}`)+list(['Foto','On surt'],(G.heic||[]).map(x=>`<tr><td>${file(x)}</td><td>${where(x.w)}</td></tr>`)):''}
+${G.heavyN?sub(`Fotos de més d'1 MB: ${G.heavyN}`)+list(['Foto','Pes','On surt'],(G.heavy||[]).map(x=>`<tr><td>${file(x)}</td><td class="n">${esc(x.mb)} MB</td><td>${where(x.w)}</td></tr>`)):''}
 ${how([
-'<b>Converteix i redueix la foto:</b> obre-la a l\'ordinador i desa-la com a JPG. Amb l\'aplicació Fotos de Windows: <b>⋯ › Canvia la mida</b>, tria una amplada de 1600 píxels i desa una còpia. També pots fer servir la web gratuïta squoosh.app.',
-'<b>Substitueix-la:</b> puja la foto nova a la pàgina i esborra la vella de <b>Mèdia › Biblioteca</b>.',
-'<b>A partir d\'ara:</b> a l\'iPhone, ves a <b>Configuració › Càmera › Formats</b> i tria <b>Més compatible</b>. Així les fotos es fan directament en JPG.'])}
-</section>`;
+'<b>Converteix i redueix la foto:</b> descarrega-la («Obre el fitxer»), obre-la amb l\'app Fotos de Windows › <b>⋯ › Canvia la mida</b>, posa 1600 píxels d\'amplada i desa-la en JPG. També es pot fer a squoosh.app.',
+'<b>Substitueix-la:</b> a la pàgina indicada a «On surt», clica «Edita», canvia la foto per la nova i després esborra la vella.',
+'<b>A l\'iPhone:</b> Configuració › Càmera › Formats › <b>Més compatible</b>, i les fotos es faran en JPG.'])}</section>`;
 
 h+=`<section class="sec band" id="s-cad"><div class="lead"><h2>Documents antics o repetits</h2><span class="st ${st.cad}">${S[st.cad]}</span></div>
-${why('Documents de cursos passats poden confondre les famílies (un calendari antic, una llista de llibres de l\'any passat). Els documents repetits fan que no se sàpiga quin és el bo.')}
-${n(C.old)?`<h3>Documents de cursos passats</h3>${tbl(['Document',''],(C.old||[]).map(x=>`<tr><td>${esc(x.t)}</td><td>${openBtn(x.u)}</td></tr>`))}`:''}
-${n(C.dups)?`<h3>Documents repetits</h3>${tbl(['Document','Còpies'],(C.dups||[]).map(x=>`<tr><td>${esc(x.t)}</td><td class="n">${x.n}</td></tr>`))}`:''}
-${n(C.stale)?`<h3>Pàgines que fa més de 2 anys que no es toquen</h3>${tbl(['Pàgina','Darrer canvi',''],(C.stale||[]).map(x=>`<tr><td>${esc(x.t)}</td><td>${esc(x.m)}</td><td>${editBtn(x.e)}</td></tr>`))}`:''}
+${why('Els documents de cursos passats poden confondre les famílies, i els repetits fan que no se sàpiga quin és el bo.')}
+${n(C.old)?sub('Documents de cursos passats')+list(['Document','Pujat el','Enllaçat a'],(C.old||[]).map(x=>`<tr><td>${file(x)}</td><td style="white-space:nowrap">${esc(x.d)}</td><td>${where(x.w)}</td></tr>`)):''}
+${n(C.dups)?sub('Documents repetits','A cada grup, «Enllaçat a» indica quina còpia es fa servir; les que no surten enlloc es poden esborrar.')+(C.dups||[]).map(g=>`<h4 style="margin:16px 0 4px">${esc(g.t)} (${g.files.length} còpies)</h4>`+list(['Còpia','Pujada el','Enllaçat a'],g.files.map(x=>`<tr><td>${file(x)}</td><td style="white-space:nowrap">${esc(x.d)}</td><td>${where(x.w)}</td></tr>`))).join(''):''}
+${n(C.stale)?sub('Pàgines sense canvis fa més de 2 anys')+list(['Pàgina','Darrer canvi'],(C.stale||[]).map(x=>`<tr><td>${page(x)}</td><td>${esc(x.m)}</td></tr>`)):''}
+${C.unused?`<p class="note">A més, hi ha <b>${C.unused}</b> documents a la biblioteca que no surten enllaçats a cap pàgina ni notícia.</p>`:''}
 ${how([
-'<b>Documents antics:</b> a <b>Mèdia › Biblioteca</b>, cerca\'ls pel nom. Si encara estan enllaçats, substitueix l\'enllaç pel document d\'aquest curs; després esborra el vell.',
-'<b>Repetits:</b> mira quin és el que surt enllaçat a la web i esborra la resta de còpies.',
-'<b>Abans d\'esborrar</b>, comprova que el document no estigui enllaçat enlloc. Si en dubtes, deixa\'l.'])}
-</section>`;
+'<b>Documents antics:</b> si encara estan enllaçats, clica «Edita» a la pàgina i canvia l\'enllaç pel document d\'aquest curs. Després esborra el vell («Edita el fitxer» › Suprimeix permanentment).',
+'<b>Repetits:</b> deixa la còpia que surt enllaçada i esborra les que diuen «No surt a cap pàgina».',
+'<b>Abans d\'esborrar,</b> comprova la columna «Enllaçat a». Si en dubtes, deixa\'l.'])}</section>`;
 
 h+=`<section class="sec band" id="s-links"><div class="lead"><h2>Enllaços que no funcionen</h2><span class="st ${st.links}">${S[st.links]}</span></div>
-${R.partial?'<p class="note">No s\'ha pogut revisar en aquesta revisió.</p>':`<p>Hem provat ${L.checked||0} enllaços que porten a altres pàgines de la mateixa web. ${n(L.bad)?n(L.bad)+' no funcionen.':'Tots funcionen.'}</p>
-${n(L.bad)?tbl(['Enllaç trencat','A la pàgina'],(L.bad||[]).map(x=>`<tr><td style="word-break:break-all">${esc(x.u)}</td><td>${esc(x.t)}</td></tr>`))+how(['Edita la pàgina, clica l\'enllaç i canvia\'l per l\'adreça correcta, o treu-lo si la pàgina ja no existeix.']):''}`}
-</section>
-<section class="sec band"><h2>Com s'ha fet aquest informe</h2><p>L'eina llegeix la part pública de la web, la mateixa que veu qualsevol visitant, i aplica unes comprovacions automàtiques. No entra a l'administració de la web, no canvia res i no guarda cap dada.</p>
-<p class="note">Què no revisa: el text de dins dels PDF, qui té permís per obrir els documents de Google Drive, ni qui surt a les fotos. Els enllaços a altres webs tampoc es comproven.</p></section>`;
+${R.partial?'<p class="note">No s\'ha pogut revisar.</p>':`<p>Hem provat <b>${L.checked||0}</b> enllaços que porten a altres pàgines o documents de la mateixa web. ${n(L.bad)?`<b>${n(L.bad)}</b> no funcionen.`:'Tots funcionen.'}</p>
+${list(['Enllaç trencat','Text de l\'enllaç','A la pàgina'],(L.bad||[]).map(x=>`<tr><td class="fn" style="word-break:break-all">${esc(x.u)}<div class="note">Error ${esc(x.s)}</div></td><td>${esc(x.txt||'')}</td><td>${page(x)}</td></tr>`))}
+${n(L.bad)?how(['Clica «Edita» a la pàgina, clica l\'enllaç i posa-hi l\'adreça correcta, o treu-lo si la pàgina o el document ja no existeixen.']):''}`}</section>
+<section class="sec band"><h2>Com s'ha fet aquest informe</h2><p>L'eina llegeix la part pública de la web, la mateixa que veu qualsevol visitant, i hi aplica comprovacions automàtiques. No entra a l'administració, no canvia res i no guarda cap dada.</p>
+<p class="note">No revisa el text de dins dels PDF, qui pot obrir els documents de Google Drive, qui surt a les fotos ni els enllaços a altres webs. «On surt» busca el fitxer dins del contingut de pàgines i notícies; si es fa servir en un menú o en un giny lateral, pot sortir com a «No surt a cap pàgina».</p></section>`;
 $('report').innerHTML=h;
 $('report').scrollIntoView({behavior:'smooth'});
 }
