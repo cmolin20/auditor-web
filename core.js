@@ -66,6 +66,7 @@ R.cad={old:files.filter(m=>oldCourse(T(m.title.rendered)+' '+fn(m.source_url))).
 const g={};files.forEach(m=>{const k=T(m.title.rendered).toLowerCase().replace(/\s*\(\d+\)\s*$/,'').replace(/[-_ ]\d{1,2}$/g,'').replace(/[-_ ]\d{1,2}$/g,'').trim();(g[k]=g[k]||[]).push(m);});
 R.cad.dups=Object.entries(g).filter(([k,a])=>a.length>2).map(([t,a])=>({t,files:a.map(mref)})).sort((a,b)=>b.files.length-a.files.length).slice(0,15);
 R.cad.unused=files.filter(m=>!where(m).length).length;
+const pt={};docs.filter(d=>d.k==='Pàgina').forEach(d=>{const t=d.tt.trim().toLowerCase();(pt[t]=pt[t]||[]).push(d.ref);});R.cad.dupPages=Object.values(pt).filter(a=>a.length>1);
 R.img={heavy:imgs.filter(m=>(m.media_details?.filesize||0)>1e6).sort((a,b)=>b.media_details.filesize-a.media_details.filesize).map(m=>({...mref(m),mb:+(m.media_details.filesize/1e6).toFixed(1)})),heic:imgs.filter(m=>/heic|heif/i.test(m.mime_type+m.source_url)).map(mref)};
 R.img.heavyN=R.img.heavy.length;
 const bad=[];const arr=o.head?[...internal].slice(0,400):[];

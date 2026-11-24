@@ -10,14 +10,14 @@ img:{t:'Fotos massa pesades',why:'Les fotos de mòbil alenteixen la web. Les d\'
 cad:{t:'Documents antics o repetits',why:'Els documents de cursos passats confonen les famílies, i les còpies repetides fan dubtar de quin és el bo.',how:['Si està enllaçat, clica <b>Edita</b> i posa el document d\'aquest curs. Després esborra el vell.','Els fitxers que no surten a cap pàgina es poden esborrar des de <b>Fitxer</b> › Suprimeix permanentment. Si en dubtes, deixa\'l.']},
 links:{t:'Enllaços que no funcionen',why:'Un enllaç trencat porta a una pàgina d\'error.',how:['Clica <b>Edita</b>, clica l\'enllaç i posa-hi l\'adreça correcta, o treu-lo.']}};
 const iss=[];let k=0;
-const add=(cat,sev,title,o={})=>iss.push({id:cat+(k++)+'-'+(o.key||title).slice(0,40),cat,sev,title,detail:o.detail||'',pages:o.pages||[],file:o.file||null,link:o.link||null});
+const add=(cat,sev,title,o={})=>iss.push({id:cat+'-'+(o.key||title),cat,sev,title,detail:o.detail||'',pages:o.pages||[],file:o.file||null,link:o.link||null,links:o.links||null});
 (D.dni||[]).forEach(x=>add('dades','r','DNI o NIE visible',{detail:'«…'+x.c+'…»',pages:[x],key:x.l+x.v}));
 (D.tel||[]).forEach(x=>add('dades','r','Telèfon mòbil visible: '+x.v,{detail:'«…'+x.c+'…»',pages:[x],key:x.l+x.v}));
 (D.emails||[]).forEach(x=>add('dades','r','Correu personal visible: '+x.v,{detail:'«…'+x.c+'…»',pages:[x],key:x.l+x.v}));
 (D.iban||[]).forEach(x=>add('dades','r','Compte bancari visible',{pages:[x],key:x.l+x.v}));
 (D.naix||[]).forEach(x=>add('dades','r','Data de naixement visible',{detail:'«…'+x.c+'…»',pages:[x],key:x.l}));
 (D.sens||[]).forEach(x=>add('dades','a','Document que pot contenir dades d\'alumnes',{detail:x.f+' · pujat el '+x.d,pages:x.w,file:x,key:x.u}));
-(D.driveList||[]).forEach(x=>add('dades','a','Document de Google Drive: comprova qui el pot obrir',{detail:'Enllaç «'+x.txt+'»',pages:[x],link:x.href,key:x.l+x.href}));
+{const dg=new Map();(D.driveList||[]).forEach(x=>{if(!dg.has(x.l))dg.set(x.l,{p:x,ls:[]});const g=dg.get(x.l);if(!g.ls.some(y=>y.href===x.href))g.ls.push(x);});dg.forEach(g=>add('dades','a',g.ls.length+' document'+(g.ls.length>1?'s':'')+' de Google Drive enllaçat'+(g.ls.length>1?'s':'')+': comprova qui els pot obrir',{pages:[g.p],links:g.ls.map(y=>({href:y.href,txt:y.txt})),key:g.p.l+'drive'}));}
 (D.tables||[]).forEach(x=>add('dades','a','Taula de '+x.n+' files: comprova si és una llista de persones',{detail:x.h,pages:[x],key:x.l+x.h}));
 (D.photoList||[]).forEach(x=>add('dades','a',x.n+' foto'+(x.n>1?'s':'')+': comprova l\'autorització de drets d\'imatge',{pages:[x],key:x.l}));
 (M.withAuthor||[]).forEach(x=>add('meta','a','PDF amb el nom «'+x.a+'» amagat',{detail:x.f,pages:x.w,file:x,key:x.u}));
@@ -36,6 +36,7 @@ const heicSet=new Set((G.heic||[]).map(x=>x.u));
 (G.heavy||[]).filter(x=>!heicSet.has(x.u)).forEach(x=>add('img','a','Foto de '+x.mb.toLocaleString('ca')+' MB',{detail:x.f,pages:x.w,file:x,key:x.u}));
 (C.old||[]).forEach(x=>add('cad','a','Document d\'un curs passat',{detail:x.f,pages:x.w,file:x,key:x.u}));
 (C.dups||[]).forEach(g=>{const used=g.files.filter(f=>n(f.w));g.files.forEach(x=>{if(n(x.w)&&used.length<=1)return;add('cad','a','Còpia repetida de «'+g.t+'»',{detail:x.f+' · pujat el '+x.d,pages:x.w,file:x,key:x.u});});});
+(C.dupPages||[]).forEach(a=>a.forEach(x=>add('cad','a','Hi ha '+(a.length>2?a.length+' pàgines':'dues pàgines')+' amb el títol «'+x.t+'»: potser una sobra',{detail:'Aquesta és '+x.l,pages:[x],key:x.l+'dup'})));
 (C.stale||[]).forEach(x=>add('cad','a','Pàgina sense canvis des del '+x.m,{pages:[{...x,k:'Pàgina'}],key:x.l}));
 (L.bad||[]).forEach(x=>add('links','a','Enllaç trencat (error '+x.s+')',{detail:(x.txt?'«'+x.txt+'» → ':'')+x.u,pages:[x],key:x.l+x.u}));
 const SK='aw-done:'+R.site;let done={};try{done=JSON.parse(localStorage.getItem(SK)||'{}');}catch(e){}
@@ -47,7 +48,7 @@ const sevOf=c=>iss.some(i=>i.cat===c&&i.sev==='r')?'r':cnt(c)?'a':'g';
 const row=(i,showPage)=>`<li class="iss${done[i.id]?' done':''}" data-id="${esc(i.id)}"><label class="ck"><input type="checkbox" ${done[i.id]?'checked':''} aria-label="Marcar com a fet"></label>
 <div class="ib"><div class="it"><span class="dot ${i.sev}"></span>${esc(i.title)}</div>${i.detail?`<div class="id">${esc(i.detail)}</div>`:''}
 ${showPage?`<div class="ip">${i.pages.length?i.pages.slice(0,3).map(p=>`<span class="pg">${B(p.l,esc(p.t),'lnk')}${p.feat?' <span class="note">(imatge destacada)</span>':''} ${B(p.e,'Edita')}</span>`).join(''):(i.file?'<span class="note">No surt a cap pàgina</span>':'')}${i.pages.length>3?`<span class="note">i ${i.pages.length-3} més</span>`:''}</div>`:''}</div>
-<div class="ia">${i.file?B(i.file.u,'Obre')+B(i.file.e,'Fitxer'):''}${i.link?B(i.link,'Obre'):''}</div></li>`;
+<div class="ia">${i.file?B(i.file.u,'Obre')+B(i.file.e,'Fitxer'):''}${i.link?B(i.link,'Obre'):''}</div>${i.links?`<div class="lks">${i.links.map(y=>B(y.href,esc((y.txt||'Document').slice(0,40)))).join('')}</div>`:''}</li>`;
 function body(){
 const list=iss.filter(i=>!filt||i.cat===filt);
 const left=list.filter(i=>!done[i.id]).length;
@@ -63,7 +64,7 @@ list.forEach(i=>{if(!i.pages.length){(i.file?orphan:global).push(i);return;}i.pa
 const groups=[...pg.values()].sort((a,b)=>b.its.filter(i=>!done[i.id]).length-a.its.filter(i=>!done[i.id]).length);
 h+=global.length?`<ul class="issl" style="margin-bottom:12px">${global.map(i=>row(i,false)).join('')}</ul>`:'';
 h+=groups.map(g=>{const p=g.its.filter(i=>!done[i.id]).length;const cats=[...new Set(g.its.map(i=>CATS[i.cat].t))];
-return `<details class="grp"><summary><span class="dot ${g.its.some(i=>i.sev==='r')?'r':p?'a':'g'}"></span><span class="gt"><b>${esc(g.p.t)}</b><small>${esc(g.p.k||'')} · ${esc(cats.join(', '))}</small></span><span class="cnt">${p?p+' pendents':'Fet ✓'}</span></summary>
+return `<details class="grp"><summary><span class="dot ${g.its.some(i=>i.sev==='r')?'r':p?'a':'g'}"></span><span class="gt"><b>${esc(g.p.t)}</b><small>${esc(g.p.k||'')} · ${esc((g.p.l||'').replace(R.site,'/'))}</small><small>${esc(cats.join(' · '))}</small></span><span class="cnt">${p?p+' pendents':'Fet ✓'}</span></summary>
 <div class="gin"><div class="acts" style="margin-bottom:10px">${B(g.p.l,'Veure la pàgina')}${B(g.p.e,'Edita la pàgina','pri')}</div><ul class="issl">${g.its.map(i=>row(i,false).replace('<div class="it">',`<div class="it"><span class="tag">${esc(CATS[i.cat].t)}</span>`)).join('')}</ul></div></details>`;}).join('');
 if(orphan.length)h+=`<details class="grp"><summary><span class="dot a"></span><span class="gt"><b>Fitxers que no surten a cap pàgina</b><small>Es poden descarregar si es coneix l'adreça. Revisa'ls abans d'esborrar-los.</small></span><span class="cnt">${orphan.filter(i=>!done[i.id]).length} pendents</span></summary><div class="gin"><ul class="issl">${orphan.map(i=>row(i,false).replace('<div class="it">',`<div class="it"><span class="tag">${esc(CATS[i.cat].t)}</span>`)).join('')}</ul></div></details>`;
 }
