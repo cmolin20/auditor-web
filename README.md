@@ -15,7 +15,7 @@ Projecte del grup de treball d'IA (XTCD Osona i Lluçanès), curs 2026-27.
 
 ## Per què cal l'intermediari
 
-L'Àgora deixa llegir l'API del WordPress des de qualsevol web, però bloqueja la lectura dels fitxers (PDF, imatges) des d'una altra web (CORS). Sense intermediari, l'eina funciona en **mode bàsic**: tot menys metadades, imatges generades amb IA, serveis externs i enllaços trencats. Per a aquests casos hi ha també el **botó de marcadors**, que fa la revisió completa des de la mateixa web del centre.
+L'Àgora deixa llegir l'API del WordPress des de qualsevol web, però bloqueja la lectura dels fitxers (PDF, imatges) des d'una altra web (CORS). Sense intermediari, l'eina funciona en **mode bàsic**: tot menys metadades, imatges generades amb IA, serveis externs i enllaços trencats.
 
 L'intermediari no és un proxy obert: només descarrega fitxers de `/wp-content/uploads/`, de les altres adreces només en comprova l'estat (HEAD), només respon a l'adreça de l'eina i, de les imatges, només baixa els primers 256 KB.
 
