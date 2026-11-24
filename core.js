@@ -36,7 +36,7 @@ const genRe=/^(aqu[ií]|clica|clic|fes clic|fes clic aquí|clica aquí|enllaç|l
 const ctx=(t,i,len)=>t.slice(Math.max(0,i-40),i+len+40).replace(/\s+/g,' ').trim();
 let internal=new Map();
 for(const {d,doc} of parsed){const t=doc.body.textContent||'';const ref=d.ref;
- let prev=1;doc.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(x=>{const l=+x.tagName[1];if(l>prev+1)R.acc.skips.push({...ref,s:'Títol '+prev+' → Títol '+l,h:x.textContent.trim().slice(0,80)});prev=l;});
+ let prev=1;doc.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(x=>{const l=+x.tagName[1];if(l>prev+1){const h=x.textContent.trim().slice(0,80);if(!R.acc.skips.some(s=>s.l===ref.l&&s.h===h))R.acc.skips.push({...ref,s:'Títol '+prev+' → Títol '+l,h});}prev=l;});
  const na=[...doc.querySelectorAll('img')].filter(i=>!(i.getAttribute('alt')||'').trim()).map(i=>fn(i.getAttribute('src')||''));
  if(na.length)R.acc.pagesNoAlt.push({...ref,n:na.length,files:na.slice(0,12)});
  doc.querySelectorAll('a').forEach(a=>{const tx=a.textContent.trim();const href=a.getAttribute('href')||'';
