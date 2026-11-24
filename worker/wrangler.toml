@@ -1,0 +1,7 @@
+name = "auditor-web-proxy"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+[vars]
+# Adreça de GitHub Pages on hi ha l'eina (sense barra final). Per provar en local, afegeix-hi també http://localhost:8000 separat per comes.
+ALLOWED_ORIGIN = "https://ELTEUUSUARI.github.io"
