@@ -220,7 +220,9 @@ let busy=false;
 $('f').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;$('err').textContent='';const v=$('url').value;if(!v.trim()){$('err').textContent='Escriu l\'adreça de la web del centre.';return;}
 busy=true;$('prog').textContent='Buscant la web…';
 try{const base=await findBase(v);if(!base){$('err').textContent='No trobo una web Nodes/WordPress en aquesta adreça. Comprova-la (per exemple agora.xtec.cat/elteucentre).';return;}
-const R=await AUDIT({base,progress:t=>{$('prog').textContent=t;},file:hasProxy?viaProxy:null,head:hasProxy?headProxy:null});
+let px=hasProxy;if(px){$('prog').textContent='Comprovant la connexió…';try{const s=await headProxy(base);if(!s)px=false;}catch(e){px=false;}}
+$('modeNote').textContent=px?'':'Revisió reduïda: ara mateix no es poden obrir els fitxers de la web, així que no es revisen els PDF, les fotos ni els enllaços.';
+const R=await AUDIT({base,progress:t=>{$('prog').textContent=t;},file:px?viaProxy:null,head:px?headProxy:null});
 $('prog').textContent='';render(R);}catch(err){$('err').textContent='No s\'ha pogut completar la revisió: '+err.message;}finally{busy=false;}});
 $('url').addEventListener('input',()=>{$('err').textContent='';});
 const pct=(a,b)=>b?Math.round(100*a/b):0;

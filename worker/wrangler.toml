@@ -4,4 +4,4 @@ compatibility_date = "2026-11-01"
 
 [vars]
 # Adreça de GitHub Pages on hi ha l'eina (sense barra final). Per provar en local, afegeix-hi també http://localhost:8000 separat per comes.
-ALLOWED_ORIGIN = "https://bcrow11.github.io"
+ALLOWED_ORIGIN = "https://cmolin20.github.io"
